@@ -1,0 +1,116 @@
+# Maintainer: Christian Hesse <mail@eworm.de>
+# Maintainer: Robin Candau <antiz@archlinux.org>
+# Contributor: Bartłomiej Piotrowski <bpiotrowski@archlinux.org>
+# Contributor: Eivind Uggedal <eivind@uggedal.com>
+
+AUR_PKG_MPV_SYSTEMWIDE="0"
+
+pkgnamesuffix=-v4l2-request
+if [ "${AUR_PKG_MPV_SYSTEMWIDE}" == "0" ]; then
+  pkgname=mpv${pkgnamesuffix}
+else
+  pkgname=mpv
+fi
+epoch=1
+pkgver=0.39.0
+pkgrel=4
+pkgdesc='a free, open source, and cross-platform media player'
+arch=('x86_64' 'aarch64')
+license=('GPL-2.0-or-later AND LGPL-2.1-or-later')
+url='https://mpv.io/'
+depends=('alsa-lib' 'desktop-file-utils' 'ffmpeg' 'glibc' 'hicolor-icon-theme'
+         'jack' 'lcms2' 'libarchive' 'libass' 'libbluray' 'libcdio'
+         'libcdio-paranoia' 'libdrm' 'libdvdnav' 'libdvdread' 'libegl' 'libgl'
+         'libglvnd' 'libjpeg-turbo' 'libplacebo' 'libpulse' 'libsixel' 'libva'
+         'libvdpau' 'libx11' 'libxext' 'libxkbcommon' 'libxpresent' 'libxrandr'
+         'libxss' 'libxv' 'luajit' 'mesa' 'mujs' 'libpipewire' 'rubberband'
+         'openal' 'uchardet' 'vapoursynth' 'vulkan-icd-loader' 'wayland' 'zlib')
+makedepends=('git' 'meson' 'python-docutils' 'ladspa' 'wayland-protocols'
+             'ffnvcodec-headers' 'vulkan-headers')
+optdepends=('yt-dlp: for video-sharing websites playback')
+#provides=('libmpv.so')
+options=('!emptydirs')
+validpgpkeys=('145077D82501AA20152CACCE8D769208D5E31419') # sfan5 <sfan5@live.de>
+source=("git+https://github.com/mpv-player/mpv.git#tag=v${pkgver}?signed"
+        "dynamically_generate_desktop_file_protocols.patch"
+        "14690.patch")
+sha256sums=('51e787dbff240d69227f306685fc962daae215c755689b9de4ef0432ddf4443b'
+            '88acf97cbc8e0fe745f09bd0bd7f65e0437adcb549dadf3588fd0724d01298e9'
+            '7510af78bdafd3e082d6ec0a430cbb6d3de982c399d11a213e10f8757605df80')
+
+
+PKG_MPV_PREFIX="/usr"
+if [ "${AUR_PKG_MPV_SYSTEMWIDE}" == "0" ]; then
+  PKG_FFMPEG_PREFIX="/opt/v4l2-request/usr"
+  PKG_MPV_PREFIX="/opt/v4l2-request/usr"
+else
+  provides=(
+    libmpv.so
+  )
+fi
+
+
+prepare() {
+  cd "mpv"
+  patch -Np1 < "${srcdir}/14690.patch"
+}
+
+build() {
+  local PKG_MPV_V4L2="-Dv4l2request=enabled"
+  local C_ARGS_EXTRA=""
+  local PKG_MPV_RPATH=""
+
+  if [ "${AUR_PKG_MPV_SYSTEMWIDE}" == "0" ]; then
+    C_ARGS_EXTRA="-I${PKG_FFMPEG_PREFIX}/include"
+    PKG_MPV_RPATH="-Wl,-rpath='${PKG_FFMPEG_PREFIX}/lib'"
+  fi
+
+  local _meson_options=(
+    --prefix="${PKG_MPV_PREFIX}"
+    --auto-features auto
+
+    -Dlibmpv=true
+    -Dgl-x11=enabled
+    -Dcaca=disabled
+    -Dcdda=enabled
+    -Ddvbin=enabled
+    -Ddvdnav=enabled
+    -Dlibarchive=enabled
+    -Dopenal=enabled
+    ${PKG_MPV_V4L2}
+    -Dc_args="${C_ARGS_EXTRA} ${CFLAGS} -O3 ${LTOFLAGS}"
+    -Dc_link_args="${LDFLAGS} ${LTOFLAGS} ${PKG_MPV_RPATH}"
+  )
+
+  arch-meson "mpv" build "${_meson_options[@]}"
+
+  meson compile -C build
+}
+
+check() {
+  meson test -C build
+}
+
+package() {
+  depends+=('libasound.so' 'libavcodec.so' 'libavdevice.so' 'libavfilter.so'
+            'libavformat.so' 'libavutil.so' 'libswresample.so' 'libswscale.so'
+            'libjack.so' 'liblcms2.so' 'libarchive.so' 'libass.so' 'libbluray.so'
+            'libjpeg.so' 'libplacebo.so' 'libpulse.so' 'libva.so' 'libva-drm.so'
+            'libva-wayland.so' 'libva-x11.so' 'libxkbcommon.so' 'librubberband.so')
+
+  meson install -C build --destdir "${pkgdir}"
+
+  # delete private entries only required for static linking 
+  sed -i -e '/Requires.private/d' -e '/Libs.private/d' "${pkgdir}${PKG_MPV_PREFIX}"/lib/pkgconfig/mpv.pc
+
+  install -m0644 mpv/DOCS/{encoding.rst,tech-overview.txt} \
+    "${pkgdir}${PKG_MPV_PREFIX}"/share/doc/mpv
+
+  install -m0644 mpv/TOOLS/{umpv,mpv_identify.sh,stats-conv.py,idet.sh,lua/*} \
+    -D -t "${pkgdir}${PKG_MPV_PREFIX}"/share/mpv/scripts
+
+  if [ "${AUR_PKG_MPV_SYSTEMWIDE}" == "0" ]; then
+    mkdir -p "${pkgdir}/usr/bin/"
+    ln -sf "${PKG_MPV_PREFIX}/bin/mpv" "${pkgdir}/usr/bin/mpv${pkgnamesuffix}"
+  fi
+}
