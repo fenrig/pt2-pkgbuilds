@@ -1,0 +1,228 @@
+# Maintainer: Maxime Gauduin <alucryd@archlinux.org>
+# Contributor: Bartłomiej Piotrowski <bpiotrowski@archlinux.org>
+# Contributor: Ionut Biru <ibiru@archlinux.org>
+# Contributor: Tom Newsom <Jeepster@gmx.co.uk>
+# Contributor: Paul Mattal <paul@archlinux.org>
+
+# ALARM: Kevin Mihelich <kevin@archlinuxarm.org>
+#  - use -fPIC in host cflags for v7/v8 to fix print_options.c compile
+#  - remove makedepends on ffnvcodec-headers, remove --enable-nvenc, --enable-nvdec
+#  - remove depends on aom, remove --enable-libaom
+#  - remove depends on intel-media-sdk, remove --enable-libmfx
+#  - remove depends on vmaf, remove --enable-vmaf
+#  - remove depends on rav1e, remove --enable-librav1e
+#  - remove depends on svt-av1, remove --enable-libsvtav1
+#  - remove --enable-lto
+#  - patch to fix 32-bit FTBFS with GCC 14
+
+# V4L2-REQUEST
+# - Added PKG_FFMPEG_* features
+# - Added v4l2-request patches
+# Based on information from following github fork: https://github.com/faithanalog/FFmpeg-v4l2
+
+
+pkgname=ffmpeg4.4
+pkgver=4.4.5
+pkgrel=1
+pkgdesc='Complete solution to record, convert and stream audio and video'
+arch=(x86_64 aarch64)
+url=https://ffmpeg.org/
+license=(GPL3)
+depends=(
+  alsa-lib
+  bzip2
+  fontconfig
+  fribidi
+  gmp
+  gnutls
+  gsm
+  jack
+  lame
+  libass.so
+  libavc1394
+  libbluray.so
+  libdav1d.so
+  libdrm
+  libfreetype.so
+  libiec61883
+  libmodplug
+  libpulse
+  libraw1394
+  librsvg-2.so
+  libsoxr
+  libssh
+  libtheora
+  libva.so
+  libva-drm.so
+  libva-x11.so
+  libvdpau
+  libvidstab.so
+  libvorbisenc.so
+  libvorbis.so
+  libvpx.so
+  libwebp
+  libx11
+  libx264.so
+  libx265.so
+  libxcb
+  libxext
+  libxml2
+  libxv
+  libxvidcore.so
+  libzimg.so
+  opencore-amr
+  openjpeg2
+  opus
+  sdl2
+  speex
+  srt
+  v4l-utils
+  xz
+  zlib
+)
+makedepends=(
+  amf-headers
+  avisynthplus
+  git
+  ladspa
+  nasm
+)
+optdepends=(
+  'avisynthplus: AviSynthPlus support'
+  'ladspa: LADSPA filters'
+)
+provides=(
+  libavcodec.so
+  libavdevice.so
+  libavfilter.so
+  libavformat.so
+  libavutil.so
+  libpostproc.so
+  libswresample.so
+  libswscale.so
+)
+_tag=9bcede27c26b2f7cd469ab6b5c8b9694c30cfca3
+source=(
+  git+https://git.ffmpeg.org/ffmpeg.git#tag=${_tag}
+  binutils-2.41.patch
+  0001-gcc14.patch
+  v4l2-4.4.3.patch
+)
+b2sums=('d9975a7578d982a1beab69cd63b6894bc4ab0338cf15716c3775bc09ffafe469eb0213c07b0575d4ca192148d29e67d00f0c3779aea0a1c1099b5505589db67b'
+        'b656a17dd3996c6871d322ba1fcf25410ed580d9600348cda087d705660601d06070492300d31c12d54b0e9914cb92bb9d997e51462c0577e1a90539bf0b76ee'
+        'd13ac8ed5baf4a0a8864fdfb6f53456d2ecab978fb5f59f571328d313fc554c64d225a7ce60fa16fbbb1cff28685784a6921852f6cfad5aa87c72ffd03887ee5'
+        '95a80c4646de97c3ed5a19b8905a537a4fbb0c65bdaeff2724006411ae393a95028bd88a14a7e90b7843036f6cfd4660ca49ee9ae27b4021bf45b92ac408fa6b')
+
+pkgver() {
+  cd ffmpeg
+  git describe --tags | sed 's/^n//'
+}
+
+prepare() {
+  cd ffmpeg
+  git cherry-pick -n 031f1561cd286596cdb374da32f8aa816ce3b135 # remove compressed_ten_bit_format
+  git cherry-pick -n 74b14ccd314aa091fa6217ebd4954489fbb7ccc8 # fix build against x265 4.0
+  patch -p1 -i ../0001-gcc14.patch
+  patch -Np1 -i ../v4l2-4.4.3.patch
+}
+
+build() {
+  cd ffmpeg
+  [[ $CARCH == "armv7h" || $CARCH == "aarch64" ]] && CONFIG='--host-cflags="-fPIC"'
+
+    local PKG_FFMPEG_OPTIMIZATIONS="--enable-optimizations \
+                                  --enable-runtime-cpudetect \
+                                  --enable-asm"
+  local PKG_FFMPEG_HWACCEL="--enable-hwaccels"
+
+  local PKG_FFMPEG_V4L2="--enable-libdrm \
+                         --enable-libudev \
+                         --enable-v4l2_m2m \
+                         --enable-v4l2-request"
+  local PKG_FFMPEG_FPU=""
+
+  if [ "${CARCH}" == "aarch64" ]; then
+    PKG_FFMPEG_FPU="--enable-neon"
+  fi
+
+
+  ./configure \
+    --extra-cflags="${CFLAGS} ${LTOFLAGS} -O3" \
+    --extra-ldflags="${LDFLAGS} ${LTOFLAGS}" \
+    --prefix=/usr \
+    --incdir=/usr/include/ffmpeg4.4 \
+    --libdir=/usr/lib/ffmpeg4.4 \
+    --disable-debug \
+    --disable-doc \
+    --disable-programs \
+    --disable-static \
+    --disable-stripping \
+    --enable-amf \
+    --enable-avisynth \
+    --enable-fontconfig \
+    --enable-gmp \
+    --enable-gnutls \
+    --enable-gpl \
+    --enable-ladspa \
+    --enable-libass \
+    --enable-libbluray \
+    --enable-libdav1d \
+    --enable-libdrm \
+    --enable-libfreetype \
+    --enable-libfribidi \
+    --enable-libgsm \
+    --enable-libiec61883 \
+    --enable-libjack \
+    --enable-libmodplug \
+    --enable-libmp3lame \
+    --enable-libopencore_amrnb \
+    --enable-libopencore_amrwb \
+    --enable-libopenjpeg \
+    --enable-libopus \
+    --enable-libpulse \
+    --enable-librsvg \
+    --enable-libsoxr \
+    --enable-libspeex \
+    --enable-libsrt \
+    --enable-libssh \
+    --enable-libtheora \
+    --enable-libv4l2 \
+    --enable-libvidstab \
+    --enable-libvorbis \
+    --enable-libvpx \
+    --enable-libwebp \
+    --enable-libx264 \
+    --enable-libx265 \
+    --enable-libxcb \
+    --enable-libxml2 \
+    --enable-libxvid \
+    --enable-libzimg \
+    --enable-shared \
+    --enable-version3 \
+    $CONFIG \
+    ${PKG_FFMPEG_OPTIMIZATIONS} \
+    ${PKG_FFMPEG_HWACCEL} \
+    ${PKG_FFMPEG_FPU} \
+    ${PKG_FFMPEG_V4L2}
+
+  make
+  make tools/qt-faststart
+  make doc/ff{mpeg,play}.1
+}
+
+package() {
+  make DESTDIR="${pkgdir}" -C ffmpeg install
+  cd "${pkgdir}"
+  # Move libs to /usr/lib, except the .so symlinks
+  local f
+  for f in usr/lib/ffmpeg4.4/*; do
+    if [[ $f == *.so ]]; then
+      ln -srf -- usr/lib/"$(readlink "$f")" "$f"
+    elif [[ ! -d $f ]]; then
+      mv "$f" usr/lib
+    fi
+  done
+  rm -r usr/share
+}
+
+# vim:set sw=2 et:
