@@ -1,4 +1,4 @@
-From ca9271bb897133cc0dff50eaf73d1f0b86a8b2ab Mon Sep 17 00:00:00 2001
+From 0c05f140b96e4bbe3f63c1d1b3749923a6415bc7 Mon Sep 17 00:00:00 2001
 From: Jonas Karlman <jonas@kwiboo.se>
 Date: Sun, 18 Aug 2024 17:42:14 -0700
 Subject: [PATCH 1/2] meson: add detection logic for v4l2request support
@@ -6,15 +6,15 @@ Subject: [PATCH 1/2] meson: add detection logic for v4l2request support
 We will probably adjust this to look for a specific libavutil version after
 v4l2request support is merged upstream, but this check is fine for now.
 ---
- meson.build       | 9 +++++++++
- meson_options.txt | 1 +
+ meson.build   | 9 +++++++++
+ meson.options | 1 +
  2 files changed, 10 insertions(+)
 
 diff --git a/meson.build b/meson.build
-index 3bca70e637068..6df1c12fe0e08 100644
+index 577da7a448ddc..f54ca4c5a96a2 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -1413,6 +1413,14 @@ if features['ios-gl']
+@@ -1411,6 +1411,14 @@ if features['ios-gl']
      sources += files('video/out/hwdec/hwdec_ios_gl.m')
  endif
  
@@ -29,7 +29,7 @@ index 3bca70e637068..6df1c12fe0e08 100644
  libva = dependency('libva', version: '>= 1.1.0', required: get_option('vaapi'))
  
  vaapi_drm = dependency('libva-drm', version: '>= 1.1.0', required:
-@@ -1864,6 +1872,7 @@ summary({'d3d11': features['d3d11'],
+@@ -1869,6 +1877,7 @@ summary({'d3d11': features['d3d11'],
           'libmpv': get_option('libmpv'),
           'lua': features['lua'],
           'opengl': features['gl'],
@@ -37,20 +37,20 @@ index 3bca70e637068..6df1c12fe0e08 100644
           'vulkan': features['vulkan'],
           'wayland': features['wayland'],
           'x11': features['x11']},
-diff --git a/meson_options.txt b/meson_options.txt
-index 7ff9262d20822..fed6f94188904 100644
---- a/meson_options.txt
-+++ b/meson_options.txt
-@@ -101,6 +101,7 @@ option('d3d-hwaccel', type: 'feature', value: 'auto', description: 'D3D11VA hwac
+diff --git a/meson.options b/meson.options
+index dae0a333ef71b..3dba7a1451dab 100644
+--- a/meson.options
++++ b/meson.options
+@@ -99,6 +99,7 @@ option('d3d-hwaccel', type: 'feature', value: 'auto', description: 'D3D11VA hwac
  option('d3d9-hwaccel', type: 'feature', value: 'auto', description: 'DXVA2 hwaccel')
  option('gl-dxinterop-d3d9', type: 'feature', value: 'auto', description: 'OpenGL/DirectX DXVA2 hwaccel')
  option('ios-gl', type: 'feature', value: 'auto', description: 'iOS OpenGL ES interop support')
 +option('v4l2request', type: 'feature', value: 'auto', description: 'V4L2 Request API hwaccel')
  option('videotoolbox-gl', type: 'feature', value: 'auto', description: 'Videotoolbox with OpenGL')
  option('videotoolbox-pl', type: 'feature', value: 'auto', description: 'Videotoolbox with libplacebo')
- option('vulkan-interop', type: 'feature', value: 'auto', description: 'Vulkan graphics interop')
+ 
 
-From a4057d3e422edf92bc67b76941470c3b4ea08b40 Mon Sep 17 00:00:00 2001
+From ef4ef9ec799b6f1767e6a7978790b100cb1b41fc Mon Sep 17 00:00:00 2001
 From: Philip Langdale <philipl@overt.org>
 Date: Sun, 18 Aug 2024 17:43:41 -0700
 Subject: [PATCH 2/2] vo: hwdec: drmprime: add separate hwdecs for v4l2request
@@ -76,7 +76,7 @@ Co-authored-by: Jonas Karlman <jonas@kwiboo.se>
  create mode 100644 video/v4l2request.c
 
 diff --git a/video/hwdec.c b/video/hwdec.c
-index 110a44fa12f20..8d1393cb00415 100644
+index deba518e82c25..de2ffecc40917 100644
 --- a/video/hwdec.c
 +++ b/video/hwdec.c
 @@ -125,6 +125,9 @@ static const struct hwcontext_fns *const hwcontext_fns[] = {
@@ -90,10 +90,10 @@ index 110a44fa12f20..8d1393cb00415 100644
      &hwcontext_fns_vaapi,
  #endif
 diff --git a/video/hwdec.h b/video/hwdec.h
-index d61dd5fbff6a9..71b7030b49ef7 100644
+index c83d20783d9a6..ad74fb9f0d7c7 100644
 --- a/video/hwdec.h
 +++ b/video/hwdec.h
-@@ -104,6 +104,7 @@ extern const struct hwcontext_fns hwcontext_fns_cuda;
+@@ -121,6 +121,7 @@ extern const struct hwcontext_fns hwcontext_fns_cuda;
  extern const struct hwcontext_fns hwcontext_fns_d3d11;
  extern const struct hwcontext_fns hwcontext_fns_drmprime;
  extern const struct hwcontext_fns hwcontext_fns_dxva2;
@@ -102,7 +102,7 @@ index d61dd5fbff6a9..71b7030b49ef7 100644
  extern const struct hwcontext_fns hwcontext_fns_vdpau;
  
 diff --git a/video/out/gpu/hwdec.c b/video/out/gpu/hwdec.c
-index a929e678f8ef0..bd4780ddf9738 100644
+index cb68c54be08a7..1d729f6285fe7 100644
 --- a/video/out/gpu/hwdec.c
 +++ b/video/out/gpu/hwdec.c
 @@ -38,6 +38,8 @@ extern const struct ra_hwdec_driver ra_hwdec_drmprime;
@@ -126,7 +126,7 @@ index a929e678f8ef0..bd4780ddf9738 100644
      &ra_hwdec_aimagereader,
  #endif
 diff --git a/video/out/hwdec/hwdec_drmprime.c b/video/out/hwdec/hwdec_drmprime.c
-index b4f9b9ff89270..35b49eedcda05 100644
+index 7869eb124a4f0..446f63de44388 100644
 --- a/video/out/hwdec/hwdec_drmprime.c
 +++ b/video/out/hwdec/hwdec_drmprime.c
 @@ -77,7 +77,7 @@ static const char *forked_pix_fmt_names[] = {
@@ -288,7 +288,7 @@ index b4f9b9ff89270..35b49eedcda05 100644
 +};
 +#endif
 diff --git a/video/out/hwdec/hwdec_drmprime_overlay.c b/video/out/hwdec/hwdec_drmprime_overlay.c
-index 31cf3dd342a9b..69758a07b6209 100644
+index 61514f8e893d3..689e9b04e55a2 100644
 --- a/video/out/hwdec/hwdec_drmprime_overlay.c
 +++ b/video/out/hwdec/hwdec_drmprime_overlay.c
 @@ -246,7 +246,7 @@ static void uninit(struct ra_hwdec *hw)
@@ -431,10 +431,10 @@ index 31cf3dd342a9b..69758a07b6209 100644
  };
 +#endif
 diff --git a/video/out/vo_dmabuf_wayland.c b/video/out/vo_dmabuf_wayland.c
-index 938c46f83ec58..6ab201836227b 100644
+index 76f9fa28d989c..a707955b86341 100644
 --- a/video/out/vo_dmabuf_wayland.c
 +++ b/video/out/vo_dmabuf_wayland.c
-@@ -820,13 +820,12 @@ static int preinit(struct vo *vo)
+@@ -848,13 +848,12 @@ static int preinit(struct vo *vo)
          }
      }
  
